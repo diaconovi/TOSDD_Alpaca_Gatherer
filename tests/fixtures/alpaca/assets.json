@@ -1,0 +1,6 @@
+[
+  {"id": "b0b6dd9d-8b9b-48a9-ba46-b9d54906e415", "class": "us_equity", "exchange": "NASDAQ", "symbol": "TSLA", "name": "Tesla, Inc. Common Stock", "status": "active", "tradable": true, "marginable": true, "shortable": true, "easy_to_borrow": true, "fractionable": true},
+  {"id": "3b8e4a0e-5a6e-4f0e-8a3f-2f2b8e1d7c11", "class": "us_equity", "exchange": "NYSE", "symbol": "BRK.B", "name": "Berkshire Hathaway Inc. Class B", "status": "active", "tradable": true, "marginable": true, "shortable": true, "easy_to_borrow": true, "fractionable": true},
+  {"id": "7d1c0a8e-1f3b-4b5e-9a7c-0e8d6f4b2a10", "class": "us_equity", "exchange": "NASDAQ", "symbol": "CHSN", "name": "Chanson International Holding", "status": "active", "tradable": false, "marginable": false, "shortable": false, "easy_to_borrow": false, "fractionable": false},
+  {"id": "c4a2e6f1-9b7d-4c3e-8f5a-1d2b3c4e5f60", "class": "us_equity", "exchange": "OTC", "symbol": "TCBI.PRB", "name": "Texas Capital Bancshares Preferred B", "status": "inactive", "tradable": false, "marginable": false, "shortable": false, "easy_to_borrow": false, "fractionable": false}
+]

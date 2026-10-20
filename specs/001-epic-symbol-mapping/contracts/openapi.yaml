@@ -1,0 +1,374 @@
+openapi: 3.1.0
+info:
+  title: Alpaca Gatherer
+  version: 1.0.0
+  description: |
+    Keeps the mapping between Capital.com epics and Alpaca symbols up to date.
+    No authentication in this version (FR-027); bind to an internal or loopback address.
+    Every error is an RFC 7807 Problem Details document (application/problem+json).
+servers:
+  - url: http://127.0.0.1:8002/api/v1
+tags:
+  - name: thresholds
+  - name: runs
+  - name: schedules
+  - name: mappings
+  - name: credentials
+
+paths:
+  /thresholds:
+    get:
+      tags: [thresholds]
+      summary: Thresholds currently used by the matching process (FR-007)
+      operationId: getThresholds
+      responses:
+        "200":
+          description: Thresholds grouped by matching stage
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Thresholds" }
+
+  /runs:
+    post:
+      tags: [runs]
+      summary: Start a full matching run in the background (FR-008)
+      description: Takes no body or options. The price-data window ends at the run's start time.
+      operationId: startRun
+      responses:
+        "202":
+          description: Run accepted and running
+          headers:
+            Location:
+              schema: { type: string }
+              description: /api/v1/runs/{run_id}
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunAccepted" }
+        "409":
+          description: |
+            `run_in_progress` (extension `active_run_id`) or `credentials_missing`.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+    get:
+      tags: [runs]
+      summary: List recent runs, newest first (FR-012a)
+      operationId: listRuns
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200":
+          description: A page of runs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunPage" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+
+  /runs/{run_id}:
+    get:
+      tags: [runs]
+      summary: One run by identifier (FR-012a)
+      operationId: getRun
+      parameters:
+        - { name: run_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: The run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "404":
+          description: "`run_not_found`"
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
+  /schedules/current:
+    get:
+      tags: [schedules]
+      summary: Current schedule, next run, last completed run and timezone (FR-013)
+      description: |
+        Times are rendered in the schedule's timezone. With no schedule: schedule and next_run are
+        null, last_run is rendered in UTC and timezone is "UTC".
+      operationId: getSchedule
+      responses:
+        "200":
+          description: Schedule view
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleView" }
+    put:
+      tags: [schedules]
+      summary: "Replace the schedule, or remove it with `schedule: null` (FR-014–FR-018)"
+      operationId: putSchedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScheduleRequest" }
+            examples:
+              cron: { value: { cron: "*/5 * * * *" } }
+              recurring:
+                value: { schedule: { day: mon-fri, time: "18:00" }, timezone: America/New_York }
+              oneTime: { value: { schedule: { date: "2026-12-01T19:48:19Z" } } }
+              remove: { value: { schedule: null } }
+      responses:
+        "200":
+          description: Applied schedule and next run, in the schedule's timezone
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleView" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+
+  /mappings:
+    get:
+      tags: [mappings]
+      summary: Look up a mapping by exactly one of capital_epic or alpaca_symbol (FR-021–FR-023)
+      operationId: lookupMapping
+      parameters:
+        - { name: capital_epic, in: query, schema: { type: string, minLength: 1 } }
+        - { name: alpaca_symbol, in: query, schema: { type: string, minLength: 1 } }
+      responses:
+        "200":
+          description: |
+            The stored record. By epic: any status. By symbol: matched records only.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Mapping" }
+        "404":
+          description: "`instrument_not_found` or `mapping_not_available` (no run has succeeded yet)"
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+
+  /credentials:
+    post:
+      tags: [credentials]
+      summary: Register Alpaca credentials (FR-024–FR-026)
+      operationId: registerCredentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CredentialsRequest" }
+      responses:
+        "201": { description: Registered. Empty body. }
+        "409":
+          description: "`credentials_exist`"
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+    patch:
+      tags: [credentials]
+      summary: Replace the stored Alpaca credentials
+      operationId: updateCredentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CredentialsRequest" }
+      responses:
+        "204": { description: Updated. }
+        "404":
+          description: "`credentials_not_found`"
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+
+components:
+  responses:
+    ValidationProblem:
+      description: "`validation_error`; the `errors` extension names each offending field"
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type: { type: string, example: "urn:alpaca-gatherer:problem:run_in_progress" }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        active_run_id: { type: string, description: Only for run_in_progress }
+        errors:
+          type: array
+          description: Only for validation_error
+          items:
+            type: object
+            properties:
+              loc: { type: array, items: { type: string } }
+              msg: { type: string }
+
+    Thresholds:
+      type: object
+      required: [candidates, window, price, behavior]
+      properties:
+        candidates:
+          type: object
+          properties:
+            name_ratio: { type: number }
+            max_name_candidates: { type: integer }
+        window:
+          type: object
+          properties:
+            sessions: { type: integer }
+            embargo_minutes: { type: integer }
+            min_bars: { type: integer }
+            feed: { type: string, enum: [sip, iex] }
+        price:
+          type: object
+          properties:
+            price_tol_pct: { type: number }
+            spread_mult: { type: number }
+        behavior:
+          type: object
+          properties:
+            corr_threshold: { type: number }
+            dir_threshold: { type: number }
+            min_sig_moves: { type: integer }
+            min_session_returns: { type: integer }
+
+    RunAccepted:
+      type: object
+      required: [run_id, status, started_at]
+      properties:
+        run_id: { type: string, format: uuid }
+        status: { type: string, const: running }
+        started_at: { type: string, format: date-time }
+
+    Run:
+      type: object
+      required: [run_id, trigger, status, started_at, price_window_end]
+      properties:
+        run_id: { type: string, format: uuid }
+        trigger: { type: string, enum: [manual, scheduled] }
+        status: { type: string, enum: [running, succeeded, failed] }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: [string, "null"], format: date-time }
+        price_window_end: { type: string, format: date-time }
+        counts:
+          type: [object, "null"]
+          properties:
+            matched: { type: integer }
+            ambiguous: { type: integer }
+            unmatched: { type: integer }
+            total: { type: integer }
+            by_reason: { type: object, additionalProperties: { type: integer } }
+        error:
+          type: [object, "null"]
+          properties:
+            code: { type: string }
+            detail: { type: string }
+
+    RunPage:
+      type: object
+      required: [items, limit, offset, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Run" } }
+        limit: { type: integer }
+        offset: { type: integer }
+        total: { type: integer }
+
+    ScheduleDefinition:
+      oneOf:
+        - type: object
+          required: [cron]
+          properties: { cron: { type: string } }
+          additionalProperties: false
+        - type: object
+          required: [schedule]
+          properties:
+            schedule:
+              oneOf:
+                - type: object
+                  required: [day, time]
+                  properties:
+                    day: { type: string, example: mon-fri }
+                    time: { type: string, pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$" }
+                  additionalProperties: false
+                - type: object
+                  required: [date]
+                  properties: { date: { type: string, format: date-time } }
+                  additionalProperties: false
+          additionalProperties: false
+
+    ScheduleRequest:
+      type: object
+      description: |
+        Exactly one of `cron` or `schedule`. `schedule: null` removes the schedule.
+        Optional `timezone` (IANA, default UTC). Mixed formats, invalid cron, invalid day range,
+        invalid time, past date or unknown timezone → 422.
+      properties:
+        cron: { type: string }
+        schedule:
+          oneOf:
+            - type: "null"
+            - type: object
+              properties:
+                day: { type: string }
+                time: { type: string }
+                date: { type: string, format: date-time }
+        timezone: { type: string, default: UTC }
+      additionalProperties: false
+
+    ScheduleView:
+      type: object
+      required: [schedule, next_run, last_run, timezone]
+      properties:
+        schedule:
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/ScheduleDefinition"
+        next_run: { type: [string, "null"], format: date-time }
+        last_run: { type: [string, "null"], format: date-time }
+        timezone: { type: string }
+
+    Candidate:
+      type: object
+      properties:
+        alpaca_symbol: { type: string }
+        kind: { type: string, enum: [exact, alias, name] }
+        tradable: { type: boolean }
+        price_diff_pct: { type: [number, "null"] }
+        direction_agreement: { type: [number, "null"] }
+        return_correlation: { type: [number, "null"] }
+        passed: { type: boolean }
+
+    Mapping:
+      type: object
+      required: [capital_epic, status, alpaca_symbol, candidates, run_id, updated_at]
+      properties:
+        capital_epic: { type: string }
+        status: { type: string, enum: [matched, ambiguous, unmatched] }
+        match_type: { type: [string, "null"], enum: [exact, alias, null] }
+        alpaca_symbol: { type: [string, "null"], description: Null unless matched }
+        candidates:
+          type: array
+          description: For ambiguous records, the passing candidates
+          items: { $ref: "#/components/schemas/Candidate" }
+        price_diff_pct: { type: [number, "null"] }
+        direction_agreement: { type: [number, "null"] }
+        return_correlation: { type: [number, "null"] }
+        reason:
+          type: [object, "null"]
+          properties:
+            code: { type: string }
+            detail: { type: string }
+        run_id: { type: string }
+        updated_at: { type: string, format: date-time }
+
+    CredentialsRequest:
+      type: object
+      required: [api_key, api_secret]
+      properties:
+        api_key: { type: string, minLength: 1, writeOnly: true }
+        api_secret: { type: string, minLength: 1, writeOnly: true }
+      additionalProperties: false

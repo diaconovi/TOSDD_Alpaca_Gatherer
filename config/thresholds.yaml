@@ -1,0 +1,22 @@
+# Matching thresholds, grouped by matching stage. Loaded once at startup; edit and restart to change.
+# See docs/matching-process.md for the meaning and justification of each value.
+
+candidates:
+  name_ratio: 0.90          # minimum difflib ratio for a company-name candidate (0 < x <= 1)
+  max_name_candidates: 3    # name candidates kept per epic (>= 1)
+
+window:
+  sessions: 20              # complete US sessions in the comparison window (>= 2)
+  embargo_minutes: 20       # a session must have closed this long before the window end (>= 0)
+  min_bars: 60              # minimum aligned regular-session hourly bars (>= 2)
+  feed: sip                 # Alpaca data feed: sip | iex
+
+price:
+  price_tol_pct: 1.0        # base price tolerance, % of the Alpaca price (> 0)
+  spread_mult: 0.5          # extra tolerance per unit of Capital.com relative spread (>= 0)
+
+behavior:
+  corr_threshold: 0.70      # minimum Pearson correlation of returns (-1 <= x <= 1)
+  dir_threshold: 0.75       # minimum direction agreement (0 <= x <= 1)
+  min_sig_moves: 10         # minimum hourly moves above the spread to judge the hourly horizon (>= 1)
+  min_session_returns: 12   # minimum non-flat session-close returns for the session fallback (>= 1)
